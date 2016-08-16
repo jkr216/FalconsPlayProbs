@@ -1,0 +1,94 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r setup}
+devtools::install_github(repo = "maksimhorowitz/nflscrapR", force = TRUE)
+library(nflscrapR)
+??nflscrapR
+players2015 <- season_playergame(2015)
+qbs2015 <- subset(players2015, pass.att > 30)
+games2014 <- season_games(Season = 2014)
+help("season_play_by_play")
+
+# Play-by-Play Data from All games in 2010
+pbp.data.2015 <- season_play_by_play(2015)
+
+# Looking at all Baltimore Ravens Offensive Plays 
+falcons_OffPlays_2015 <- subset(pbp.data.2015, posteam == "ATL")
+
+### Save
+save(pbp.data.2015, falcons_OffPlays_2015,  file = 'SourceData.RDat')
+
+```
+
+
+```{r}
+g14 <- read.csv2(file.path(dataDir, 'football', 'pbp-2014.csv'), 
+                 sep=',', header=TRUE, stringsAsFactors=FALSE)
+g15 <- read.csv2(file.path(dataDir, 'football', 'pbp-2015.csv'), 
+                 sep=',', header=TRUE, stringsAsFactors=FALSE)
+
+games <- bind_rows(g14, g15)
+
+oneOff <- games %>%
+    filter(OffenseTeam == 'NYG', PlayType %in% c('PASS', 'RUSH')) %>%
+    mutate(PlayType=factor(PlayType, levels=c('RUSH', 'PASS')), 
+           Down=factor(Down, levels=c(1, 2, 3, 4)))
+
+ggplot(oneOff, aes(x=PlayType)) + geom_bar(fill='darkgrey') + facet_wrap(~Down)
+
+passRushMod1 <- glm(PlayType ~ Down - 1, data=oneOff, family=binomial)
+summary(passRushMod1)
+
+coefplot(passRushMod1, title='Probability of Pass')
+
+invlogit <- function(x)
+{
+    1/(1 + exp(-x))
+}
+
+round(invlogit(-6:6), 2)
+
+coefplot(passRushMod1, trans=invlogit, title='Probability of Pass')
+
+passRushMod2 <- glm(PlayType ~ Down + ToGo - 1, data=oneOff, family=binomial)
+coefplot(passRushMod2, trans=invlogit, title='Probability of Pass')
+
+# make grid of scenarios
+scenarios <- expand.grid(ToGo=1:15, Down=1:4) %>% as.tbl %>% 
+    mutate(Down=factor(Down, levels=c(1, 2, 3, 4)))
+# make prediction based on model
+scenarioPredict <- predict(passRushMod2, 
+                           newdata=scenarios, type='response', se.fit=TRUE)
+# build confidence intervals
+scenarios <- scenarios %>% mutate(Prediction=scenarioPredict$fit, 
+                                  Lower=Prediction - 2*scenarioPredict$se.fit,
+                                  Upper=Prediction + 2*scenarioPredict$se.fit)
+
+ggplot(scenarios, aes(x=ToGo)) + scale_y_continuous(label=scales::percent) +
+    geom_ribbon(aes(ymin=Lower, ymax=Upper), fill='lightgrey') +
+    geom_line(aes(y=Prediction)) + facet_wrap(~Down, nrow=2)
+
+onePass <- oneOff %>% filter(PlayType == 'PASS') %>%
+    mutate(Receiver=str_extract_all(Description, pattern=' \\d{1,2}-\\w\\.\\w+( |\\.)',
+                                    simplify=TRUE) %>% `[`(, 2), 
+           Receiver=str_replace_all(Receiver, '(\\d{1,2}-)|(\\.$)', ''), 
+           Receiver= str_trim(Receiver)) %>% 
+                      filter(Receiver %in% 
+                                 c("L.DONNELL", "V.CRUZ", "R.RANDLE", 
+                                   "O.BECKHAM", "H.NICKS"))
+
+DT
+ggplot2
+dplyr
+coefplot
+stringr
+
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
