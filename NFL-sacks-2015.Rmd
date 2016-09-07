@@ -1,0 +1,98 @@
+---
+title: "2015 Sacks"
+resource_files:
+- SourceData.RDat
+runtime: shiny
+output: flexdashboard::flex_dashboard
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(flexdashboard)
+library(scales)
+
+load('SourceData.RDat')
+
+team_sacks <- subset(pbp.data.2015, PlayType == "Sack" & qtr != "5") %>% 
+  group_by(DefensiveTeam, qtr) %>% 
+  summarise(team = sum(Sack)) %>%
+  group_by(qtr) %>%
+  mutate(avg = round(mean(team)))
+```
+
+
+Sacks {data-orientation=rows}
+=====================================
+
+Sidebar {.sidebar}
+-------------------------------------
+
+```{r}
+
+helpText("Choose a team")
+
+selectInput("sackTeam", "Choose a team", 
+                          choices = c("ATL",
+                                      "CAR",
+                                      "NE",
+                                      "CHI", 
+                                      "GB",
+                                      "NO", 
+                                      "KC", 
+                                      "HOU",
+                                      "TB", 
+                                      "CIN",
+                                      "OAK",
+                                      "WAS",
+                                      "NYG",
+                                      "PHI",
+                                      "DAL",
+                                      "NYJ",
+                                      "BUF",
+                                      "MIA",
+                                      "SD",
+                                      "KC",
+                                      "SEA",
+                                      "STL",
+                                      "ARI",
+                                      "SF",
+                                      "PIT",
+                                      "CIN",
+                                      "CLE",
+                                      "BAL",
+                                      "GB",
+                                      "CHI",
+                                      "MIN",
+                                      "DET"
+                                      ))
+
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Sacks by Quarter
+
+```{r, echo = FALSE}
+
+renderPlot({
+teamName <- reactive({input$sackTeam})
+
+sacks_quarter <- subset(team_sacks, DefensiveTeam == as.character(teamName())) %>% 
+  gather(team, total, -qtr, -DefensiveTeam) %>% 
+  mutate(team = factor(team, levels = c("team", "avg")))
+  
+ggplot(sacks_quarter, aes(x = qtr, y = total, fill = team)) + 
+  geom_bar(stat="identity", position = position_dodge(width = 0.65), width = .5) + 
+  scale_fill_manual(values = c("pink", "lightblue"), name = NULL, 
+                    labels = c( as.character(teamName()), "League Average")) +
+  scale_y_continuous(breaks = 1:max(sacks_quarter$total)) + 
+  ylab("Sacks per Quarter") +
+  xlab("Quarter") +
+  ggtitle(paste(as.character(teamName()), "Sacks v. League Average", sep=" "))
+})
+```
+

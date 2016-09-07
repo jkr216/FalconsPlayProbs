@@ -7,20 +7,178 @@ output: html_notebook
 ```{r setup}
 devtools::install_github(repo = "maksimhorowitz/nflscrapR", force = TRUE)
 library(nflscrapR)
-??nflscrapR
-players2015 <- season_playergame(2015)
-qbs2015 <- subset(players2015, pass.att > 30)
-games2014 <- season_games(Season = 2014)
-help("season_play_by_play")
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
 
-# Play-by-Play Data from All games in 2010
-pbp.data.2015 <- season_play_by_play(2015)
+load('SourceData.RDat')
 
-# Looking at all Baltimore Ravens Offensive Plays 
-falcons_OffPlays_2015 <- subset(pbp.data.2015, posteam == "ATL")
+# Play-by-Play Data from All games in 2015
+#pbp.data.2015 <- season_play_by_play(2015)
+#subset to just falcons offensive plays
+#falcons_OffPlays_2015 <- subset(pbp.data.2015, postteam == "ATL")
+
+# Looking at all Falcons Offensive Plays, no 4th downs, no penalites, no substitute qb 
+##add the Week variable and remember to include sacks. maybe the qb thing isn't necessary?
+falcons_OffPlays_2015 <- subset(pbp.data.2015, 
+                                posteam == "ATL" & down != "4" & PlayType != "No Play" & down != "NA" & 
+                                (PlayType == "Run" | Passer == "M.Ryan" | PlayType == "Sack")) %>%  
+                         mutate(Week = as.factor(GameID),
+                                Week = as.numeric(Week),
+                                down=factor(down, levels=c(1, 2, 3)))
+
+falcons_3rd_downs <- subset(falcons_OffPlays_2015,
+                            ##pbp.data.2015
+                                ##posteam == as.character("input$selectTeam")
+                                down == "3" & ydstogo > 3 & ydstogo < 16 &
+                                PlayType == "Pass" | PlayType == "Sack") %>%  
+                            group_by(FirstDown) %>% 
+                            summarise (n = n()) %>%
+                            mutate(freq = round(n / sum(n), digits = 2))
+
+falcons_sacks_2015 <- subset(pbp.data.2015, DefensiveTeam == "ATL" & PlayType == "Sack") %>%  
+                         mutate(Week = as.factor(GameID),
+                                Week = as.numeric(Week),
+                                down=factor(down, levels=c(1, 2, 3, 4)))
+
+team_sacks <- subset(pbp.data.2015, PlayType == "Sack" & qtr != "5") %>%
+                         group_by(DefensiveTeam, qtr) %>% 
+                         summarise(qtr_total = sum(Sack)) %>%
+                         group_by(qtr) %>%
+                         mutate(avg = round(mean(qtr_total)))
+                         
+
+mutate(Week = as.factor(GameID),
+Week = as.numeric(Week),
+down=factor(down, levels=c(1, 2, 3, 4)))
+
+sacks_quarter <- falcons_sacks_2015 %>% group_by(qtr) %>% summarise(qtr_total = sum(Sack))
+ggplot(sacks_quarter, aes(x = qtr, y=qtr_total)) + geom_bar(stat = "identity", color = "darkblue") +
+ylab("Sacks per quarter") + xlab("quarter") + ggtitle("Falcons 2015 Sacks by Quarter") + scale_y_continuous(breaks = 1:max(sacks_quarter$qtr_total))
+## Only keep the most common species
+#surveys_complete <- surveys_complete %>%
+ #                filter(species_id %in% species_counts$species_id)
+
+
+falcons_OffPlays_2015$run_pass <- gsub("Sack", "Pass", falcons_OffPlays_2015[["PlayType"]])
+
+## turnovers by down, dist, quarter
+##red zone play calling and turnovers yrdline100 <= 100
+##probability of run/pass
+##sections: last year, our coach(es), our players, offense, defense, offseason, this year
+
+
 
 ### Save
 save(pbp.data.2015, falcons_OffPlays_2015,  file = 'SourceData.RDat')
+
+```
+
+```{r}
+library(scales)
+ggplot(falcons_3rd_downs, aes( x= FirstDown, y = freq, fill = FirstDown)) + geom_bar(colour="black", stat="identity") + scale_y_continuous(labels = percent) +
+    guides(fill=FALSE)
+
+```
+
+
+On Matt Ryan: 
+First, he had an OK year last year, not a terrible year. He was rated 9th in the league by Pro Football Focus and threw for over 4000 yards. Besides the top 10 quarterbacks in the league, anyone else would be doing cartwheels to have a season like that.  When we consider that he had a new offensive coordinator, who installed a scheme that is not a good fit for him, and a scheme that is notoriously hard to learn, his numbers look better. Remember: a hard scheme doesn't just affect the quarterback, the receivers have to learn it too. Accepted wisdom is that Shannahan's scheme is so complex that it takes a year to learn. That's a huge problem as I'll argue later, but for now, just consider how it affected Ryan. To make matters even worse, after the final preseason game, we cut Joe Hawley, our starting center, and replaced him with Mike Person, a backup guard who had never played center in his life. This was an indefensibly stupid decision and is yet another reason that Shannahan should be fired but, again, for now, let's just stick to Ryan. He was playing in a new scheme, a bad scheme for him, his receivers didn't know it, and his center had never played center before. How in the hell is a quarterback supposed to play under those circumstances? Remember: those other teams are professionals also; they pay their defensive players a lot of money to stop the offense; and if they get to feast on a team with a poor scheme and a terrible center, what resuls can we expect? So, given all that, Ryan actually had a damn good year. 
+
+If we want evidence of how bad his center was and how uncomfortable it made him, he actually went to the coaches and demanded they address the center position in the offseason. This is very uncharacteristic for Ryan and he never publicized it, but it just shows how incredibly, inexplicably, unimaginably poorly Shannahan managed his first season. Center!? It's a really important position and we just ignored it. 
+
+Why is center so important? Full disclosure: I stopped playing football in the seventh grade, so all of this is gleaned from common sense - which apparently Shannahan does not posses. The most obvious and visible function of a center is to get the ball to the quarterback. Sounds easy enough. But there's a reason that people practice for 15 years before making it to the NFL - the little things make a big difference at the pro level. Can the center snap the ball consistently exactly where the quarterback is expecting it, or is it off by just a centimeter every play so the quarterback has to feel and regrip the ball? Does the center start moving too soon, so it disrupts the exchange? I know only that we fumbled several center exchanges last season. That implies that the exchange was not smooth - and we only notice when there's an actual fumble. When the exchange was just poor and probably threw off Ryan's feel, we wouldn't notice. This also takes a mental toll on the quarterback, before every play, he is supposed to be focused on reading the defense. The center exchange should be so automatic that it consumers zero mental energy. Instead, last year, the first thing Ryan had to think about was: Is Mike Person even going be able to snap the ball? 
+
+Alright, snapping is important, but the center is also the 2nd most cerebral position on the team. The center calls out assignments and protections based on the defense, and based on how the quarterback changes the play. Again, Mike Person had never done this until after the last preseason game last year. There is no way a player could learn this skill in a matter of days, weeks or even months. It takes years. Shannahan, evidently, doesn't know this. And, I hate to say it, Quinn doesn't either because he sanctions every stupid decision by Shannahan. The direct results are obvious. The  other offensive linemen don't know who to block and free rushers get to the quarterback if the defense is able to trick the new center. However, don't ignore the indirect result: Matt Ryan knew last year that when his center looked at the defense, that center had no idea what to do and no idea how to guide his fellw linemen. How is a quarterback supposed to be effective or feel freedom to change a play when his center can't read a defense? It's just not realistic. On a side note, I actually feel bad for the entire offensive line. Imagine being a guard on the team last year and the center has no idea what he's doing. The center is making line calls that are obviously wrong. Should the guard ignore the center and block the right person, or listen to the center because he's supposed to listen? Seriously, what's the answer? I don't know, but I do know that only an idiot would construct a line in this way. And Shannahan. Ergo, Shannahan is one. 
+
+Before we look at Matt's numbers just a little, we need to say a word about scheme complexity. Shannahan's is quite complex and has never had long term success in the NFL. A big problem is that the best quarterbacks, the ones who earn their $100mm, are the ones that can come up to the line of scrimmage, identify the defense and then attack the weakest part of that defense. Ryan excels at this in the two minute drill. Shannahan's offense severely limits a quarterback here. It is so complex and each player's responsibility changes so much with each wrinkle that quarterback audibles are discouraged, directly and indirectly. It's a bad fit for Ryan, or any crafty veteran quarterback. It's also why the offense sputtered after 5 games. Once the defenses picked up on our patters, they adjusted. Ryan couldn't readjust at the line of scrimmage. If this doesn't change, it will be a long season. 
+
+```{r}
+library(tidyr)
+team_sacks <- subset(pbp.data.2015, PlayType == "Sack" & qtr != "5") %>% 
+  group_by(DefensiveTeam, qtr) %>% 
+  summarise(falcons = sum(Sack)) %>%
+  group_by(qtr) %>%
+  mutate(avg = round(mean(falcons)))
+
+sacks_quarter <- subset(team_sacks, DefensiveTeam == "ATL") %>% 
+  gather(team, total, -qtr, -DefensiveTeam)
+  
+ggplot(sacks_quarter, aes(x = reorder(qtr, -team), y = total, fill = team)) + 
+  geom_bar(stat="identity", position = position_dodge(width = 0.75), width = .5) + 
+  scale_fill_manual(values = c("lightblue", "darkblue")) +
+  scale_y_continuous(breaks = 1:max(sacks_quarter$total)) + 
+  ylab("Sacks per Quarter") +
+  xlab("Quarter") +
+  ggtitle("Team 2015 Sacks by Quarter")
+
+```
+
+
+
+```{r}
+all_plays <-ggplot(falcons_OffPlays_2015, aes(x=run_pass)) + geom_bar(fill='darkblue') + facet_wrap(~qtr)
+all_plays
+```
+
+```{r}
+falcons_redzone_2015 <- subset(falcons_OffPlays_2015, yrdline100 <= 20)
+
+rzPlot <-ggplot(falcons_redzone_2015, aes(x=PlayType)) + geom_bar(fill='red') + facet_wrap(~down)
+rzPlot
+```
+
+```{r}
+rz_winning <- subset(falcons_redzone_2015, ScoreDiff > 4)
+rz_winning_Plot <-ggplot(rz_winning, aes(x=PlayType)) + geom_bar(fill='lightblue') + facet_wrap(~down)
+rz_winning_Plot
+```
+
+```{r}
+rz_losing <- subset(falcons_redzone_2015, ScoreDiff <= 4)
+rz_losing_Plot <-ggplot(rz_losing, aes(x=PlayType)) + geom_bar(fill='blue') + facet_wrap(~down)
+rz_losing_Plot
+```
+
+```{r}
+passRushMod1 <- glm(run_pass ~ down - 1, data=falcons_OffPlays_2015, family=binomial)
+#summary(passRushMod1)
+library(coefplot)
+coefplot(passRushMod1, title='Probability of Pass')
+
+```
+
+```{r}
+invlogit <- function(x)
+{
+    1/(1 + exp(-x))
+}
+
+round(invlogit(-6:6), 2)
+
+##coefplot(passRushMod1, trans=invlogit, title='Probability of Pass')
+
+passRushMod2 <- glm(run_pass ~ down + ydstogo - 1, data=falcons_OffPlays_2015, family=binomial)
+coefplot(passRushMod2, trans=invlogit, title='Probability of Pass')
+```
+
+```{r}
+# make grid of scenarios
+scenarios <- expand.grid(ydstogo=1:15, down=1:3) %>% as.tbl %>% 
+  mutate(down=factor(down, levels=c(1, 2, 3)))
+# make prediction based on model
+scenarioPredict <- predict(passRushMod2, 
+                           newdata=scenarios, type='response', se.fit=TRUE)
+# build confidence intervals
+scenarios <- scenarios %>% mutate(Prediction=scenarioPredict$fit, 
+                                  Lower=Prediction - 2*scenarioPredict$se.fit,
+                                  Upper=Prediction + 2*scenarioPredict$se.fit)
+
+ggplot(scenarios, aes(x=ydstogo)) + scale_y_continuous(label=scales::percent) +
+    geom_ribbon(aes(ymin=Lower, ymax=Upper), fill='lightgrey') +
+    geom_line(aes(y=Prediction), color = "blue")+ facet_wrap(~down) + 
+    ylab("Probability of Run") + xlab("Yards to Go")
 
 ```
 
